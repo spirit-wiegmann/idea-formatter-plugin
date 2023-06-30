@@ -29,7 +29,7 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 @Command(mixinStandardHelpOptions = true,
-        name = "idea.sh format",
+        name = "formatter",
         description = "Formats and rearranges code according IDEA Code Style settings")
 public class FormatCommand implements Callable<Integer> {
     private static final StdIoMessageOutput messageOutput = StdIoMessageOutput.INSTANCE;
@@ -44,13 +44,14 @@ public class FormatCommand implements Callable<Integer> {
     @Option(names = {"-r", "--recursive"}, description = "Scan directories recursively")
     private boolean recursive;
 
-    @Option(names = {"-m", "--mask"}, split = ",", description = "A comma-separated list of file masks")
+    @Option(names = {"-m", "--mask"}, split = ",", paramLabel = "<mask>",
+            description = "A comma-separated list of file masks")
     private List<String> masks = List.of();
 
     @Option(names = {"-d", "--dry"}, description = "Perform a dry run: no file modifications, only exit status")
     private boolean dry;
 
-    @Parameters(index = "1..*", description = "A path to a file or a directory")
+    @Parameters(index = "1..*", paramLabel = "<file>", description = "A path to a file or a directory")
     private List<Path> files = List.of();
 
     @Parameters(index = "0", hidden = true)
