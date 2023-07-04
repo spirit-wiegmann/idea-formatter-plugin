@@ -8,6 +8,7 @@ import com.intellij.psi.PsiFile;
 
 public class FileFormatter implements FileProcessor {
     private static final String PROCESS_RESULT_OK = "OK";
+    private static final String PROCESS_RESULT_READ_ONLY = "Skipped, read only";
 
     private final FormatStatistics statistics;
 
@@ -17,6 +18,10 @@ public class FileFormatter implements FileProcessor {
 
     @Override
     public String processFile(PsiFile originalFile) {
+        if (!originalFile.isWritable()) {
+            return PROCESS_RESULT_READ_ONLY;
+        }
+
         AbstractLayoutCodeProcessor processor = new ReformatCodeProcessor(originalFile, false);
         processor = new RearrangeCodeProcessor(processor);
         NonProjectFileWritingAccessProvider.disableChecksDuring(processor::run);

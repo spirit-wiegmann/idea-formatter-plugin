@@ -35,7 +35,7 @@ Working directory in image is `/data` by default.
 ### Docker exec
 
 ```shell
-# Launch container and leave it background
+# Launch container and leave it in background
 docker run -it --entrypoint cat --rm -v $PROJECT_PATH:/data funbiscuit/idea-formatter
 # Connect to container
 docker exec -it $CONTAINER_ID /bin/bash
@@ -54,13 +54,13 @@ To get list of available options you can execute:
 docker run --rm -it funbiscuit/idea-formatter -h
 ```
 
-|     Option      | Example         | Description                                                                    |
-|:---------------:|-----------------|--------------------------------------------------------------------------------|
-|    -d, --dry    |                 | Perform a dry run: no file modifications, only exit status                     |
-|       -h        |                 | Show this help message and exit.                                               |
-|   -m, --mask    | *.java,*.groovy | A comma-separated list of file masks. Use quotes to prevent wildcard expansion |
-| -r, --recursive |                 | Scan directories recursively                                                   |
-|   -s, --style   | CodeStyle.xml   | A path to Intellij IDEA code style settings .xml file                          |
+|     Option      | Example           | Description                                                                    |
+|:---------------:|-------------------|--------------------------------------------------------------------------------|
+|    -d, --dry    |                   | Perform a dry run: no file modifications, only exit status                     |
+|       -h        |                   | Show this help message and exit.                                               |
+|   -m, --mask    | \*.java,\*.groovy | A comma-separated list of file masks. Use quotes to prevent wildcard expansion |
+| -r, --recursive |                   | Scan directories recursively                                                   |
+|   -s, --style   | CodeStyle.xml     | A path to Intellij IDEA code style settings .xml file                          |
 
 ## License
 

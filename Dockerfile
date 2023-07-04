@@ -1,4 +1,4 @@
-FROM ubuntu AS idea
+FROM ubuntu:22.04 AS idea
 
 WORKDIR /app
 
