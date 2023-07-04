@@ -37,6 +37,7 @@ public class FormatCommand implements Callable<Integer> {
     private static final String PROJECT_DIR_SUFFIX = ".tmp";
     private static final String PROCESS_RESULT_BINARY_FILE = "Skipped, binary file.";
     private static final String PROCESS_RESULT_FAILED_OPEN = "Failed to open.";
+    private static final String PROCESS_RESULT_FAILED_TO_PROCESS = "Failed to process.";
 
     @Option(names = {"-s", "--style"}, required = true, description = "A path to Intellij IDEA code style settings .xml file")
     private Path style;
@@ -103,8 +104,18 @@ public class FormatCommand implements Callable<Integer> {
 
     private void processPath(Path filePath) {
         messageOutput.info("%s %s... ".formatted(fileProcessor.actionMessage(), filePath));
-        String result = processPathInternal(filePath);
+        String result;
+        Exception ex = null;
+        try {
+            result = processPathInternal(filePath);
+        } catch (Exception e) {
+            result = PROCESS_RESULT_FAILED_TO_PROCESS;
+            ex = e;
+        }
         messageOutput.info("%s%n".formatted(result));
+        if (ex != null) {
+            ex.printStackTrace();
+        }
     }
 
     private String processPathInternal(Path filePath) {

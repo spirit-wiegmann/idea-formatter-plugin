@@ -3,8 +3,13 @@ package com.funbiscuit.idea.plugin.formatter;
 import com.intellij.codeInsight.actions.AbstractLayoutCodeProcessor;
 import com.intellij.codeInsight.actions.RearrangeCodeProcessor;
 import com.intellij.codeInsight.actions.ReformatCodeProcessor;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.impl.NonProjectFileWritingAccessProvider;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
+import com.intellij.psi.util.PsiUtilCore;
+
+import java.util.Objects;
 
 public class FileFormatter implements FileProcessor {
     private static final String PROCESS_RESULT_OK = "OK";
@@ -18,7 +23,10 @@ public class FileFormatter implements FileProcessor {
 
     @Override
     public String processFile(PsiFile originalFile) {
-        if (!originalFile.isWritable()) {
+        FileDocumentManager documentManager = FileDocumentManager.getInstance();
+        VirtualFile virtualFile = PsiUtilCore.getVirtualFile(originalFile);
+        var document = documentManager.getDocument(Objects.requireNonNull(virtualFile));
+        if (!documentManager.requestWriting(Objects.requireNonNull(document), null)) {
             return PROCESS_RESULT_READ_ONLY;
         }
 
