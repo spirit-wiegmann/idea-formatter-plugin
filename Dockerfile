@@ -1,15 +1,14 @@
-FROM ubuntu:22.04 AS idea
+FROM ubuntu:jammy-20230624
 
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y unzip \
+  && apt-get install -y unzip wget libfreetype6 fontconfig \
   && rm -rf /var/lib/apt/lists/*
 
-# file idea-*.tar.gz, downloaded from jetbrains
-COPY build/ideaIC-2023.1.3.tar.gz idea.tar.gz
-RUN tar -xzf idea.tar.gz \
-    && rm idea.tar.gz \
+RUN wget https://download.jetbrains.com/idea/ideaIC-2023.1.3.tar.gz \
+    && tar -xzf ideaIC-2023.1.3.tar.gz \
+    && rm ideaIC-2023.1.3.tar.gz \
     && mv idea-* idea \
     && cd idea \
     && mv plugins plugins-old \
@@ -17,16 +16,7 @@ RUN tar -xzf idea.tar.gz \
     && cp -r plugins-old/java plugins-old/java-ide-customization plugins-old/keymap-* plugins \
     && rm -r plugins-old
 
-
-FROM ubuntu
-
 WORKDIR /app/idea
-
-RUN apt-get update \
-  && apt-get install -y libfreetype6 fontconfig \
-  && rm -rf /var/lib/apt/lists/*
-
-COPY --from=idea /app/idea .
 
 COPY build/distributions/formatter-plugin plugins/formatter-plugin
 
