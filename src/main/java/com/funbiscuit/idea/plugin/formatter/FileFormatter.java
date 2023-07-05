@@ -33,6 +33,7 @@ public class FileFormatter implements FileProcessor {
         AbstractLayoutCodeProcessor processor = new ReformatCodeProcessor(originalFile, false);
         processor = new RearrangeCodeProcessor(processor);
         NonProjectFileWritingAccessProvider.disableChecksDuring(processor::run);
+        FileDocumentManager.getInstance().saveDocument(document);
 
         statistics.fileProcessed(true);
         return PROCESS_RESULT_OK;
