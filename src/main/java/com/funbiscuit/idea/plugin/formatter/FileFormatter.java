@@ -1,5 +1,6 @@
 package com.funbiscuit.idea.plugin.formatter;
 
+import com.funbiscuit.idea.plugin.formatter.report.FileInfo;
 import com.intellij.codeInsight.actions.AbstractLayoutCodeProcessor;
 import com.intellij.codeInsight.actions.RearrangeCodeProcessor;
 import com.intellij.codeInsight.actions.ReformatCodeProcessor;
@@ -12,22 +13,16 @@ import com.intellij.psi.util.PsiUtilCore;
 import java.util.Objects;
 
 public class FileFormatter implements FileProcessor {
-    private static final String PROCESS_RESULT_OK = "OK";
-    private static final String PROCESS_RESULT_READ_ONLY = "Skipped, read only";
-
-    private final FormatStatistics statistics;
-
-    public FileFormatter(FormatStatistics statistics) {
-        this.statistics = statistics;
-    }
 
     @Override
-    public String processFile(PsiFile originalFile) {
+    public void processFile(PsiFile originalFile, FileInfo fileInfo) {
+        String originalContent = originalFile.getText();
         FileDocumentManager documentManager = FileDocumentManager.getInstance();
         VirtualFile virtualFile = PsiUtilCore.getVirtualFile(originalFile);
         var document = documentManager.getDocument(Objects.requireNonNull(virtualFile));
         if (!documentManager.requestWriting(Objects.requireNonNull(document), null)) {
-            return PROCESS_RESULT_READ_ONLY;
+            fileInfo.addWarning(ProcessStatuses.SKIPPED_READ_ONLY);
+            return;
         }
 
         AbstractLayoutCodeProcessor processor = new ReformatCodeProcessor(originalFile, false);
@@ -35,12 +30,10 @@ public class FileFormatter implements FileProcessor {
         NonProjectFileWritingAccessProvider.disableChecksDuring(processor::run);
         FileDocumentManager.getInstance().saveDocument(document);
 
-        statistics.fileProcessed(true);
-        return PROCESS_RESULT_OK;
-    }
-
-    @Override
-    public String actionMessage() {
-        return "Formatting";
+        if (originalFile.getText().equals(originalContent)) {
+            fileInfo.addInfo(ProcessStatuses.FORMATTED_WELL);
+        } else {
+            fileInfo.addInfo(ProcessStatuses.FORMATTED);
+        }
     }
 }

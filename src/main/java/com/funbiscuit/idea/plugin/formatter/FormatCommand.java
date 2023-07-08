@@ -1,5 +1,6 @@
 package com.funbiscuit.idea.plugin.formatter;
 
+import com.funbiscuit.idea.plugin.formatter.report.*;
 import com.intellij.application.options.CodeStyle;
 import com.intellij.formatting.commandLine.StdIoMessageOutput;
 import com.intellij.ide.RecentProjectsManager;
@@ -11,7 +12,6 @@ import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VfsUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import com.intellij.psi.impl.source.codeStyle.CodeStyleSettingsLoader;
 import picocli.CommandLine;
@@ -22,6 +22,8 @@ import picocli.CommandLine.Parameters;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -35,9 +37,6 @@ public class FormatCommand implements Callable<Integer> {
     private static final StdIoMessageOutput messageOutput = StdIoMessageOutput.INSTANCE;
     private static final String PROJECT_DIR_PREFIX = "idea.reformat.";
     private static final String PROJECT_DIR_SUFFIX = ".tmp";
-    private static final String PROCESS_RESULT_BINARY_FILE = "Skipped, binary file.";
-    private static final String PROCESS_RESULT_FAILED_OPEN = "Failed to open.";
-    private static final String PROCESS_RESULT_FAILED_TO_PROCESS = "Failed to process.";
 
     @Option(names = {"-s", "--style"}, required = true, description = "A path to Intellij IDEA code style settings .xml file")
     private Path style;
@@ -52,6 +51,9 @@ public class FormatCommand implements Callable<Integer> {
     @Option(names = {"-d", "--dry"}, description = "Perform a dry run: no file modifications, only exit status")
     private boolean dry;
 
+    @Option(names = {"--report"}, description = "Where to save report (by default not saved). Supported extensions: '.html'")
+    private Path report;
+
     @Parameters(index = "1..*", paramLabel = "<file>", description = "A path to a file or a directory")
     private List<Path> files = List.of();
 
@@ -61,6 +63,17 @@ public class FormatCommand implements Callable<Integer> {
     private Path projectPath;
     private Project project;
     private FileProcessor fileProcessor;
+
+    private static Reporter createReporterForFile(Path file) {
+        if (file == null) {
+            return null;
+        }
+        if (file.toString().endsWith(".html")) {
+            return new HtmlReporter();
+        } else {
+            return null;
+        }
+    }
 
     @Override
     public Integer call() throws Exception {
@@ -75,74 +88,113 @@ public class FormatCommand implements Callable<Integer> {
                 .reduce(Predicate::or)
                 .orElse(p -> true);
 
+        var reporter = createReporterForFile(report);
+        if (report != null && reporter == null) {
+            messageOutput.info("Given report file extension is not supported\n");
+            return CommandLine.ExitCode.SOFTWARE;
+        }
+
         createTempProject();
 
         loadSettings(style);
 
-        FormatStatistics statistics = new FormatStatistics();
         if (dry) {
-            fileProcessor = new FileVerifier(project, statistics);
+            fileProcessor = new FileVerifier(project);
         } else {
-            fileProcessor = new FileFormatter(statistics);
+            fileProcessor = new FileFormatter();
         }
 
+        List<Path> allFiles = new ArrayList<>();
+        messageOutput.info("Counting files...\n");
         for (var path : files) {
             try (var stream = Files.walk(path, recursive ? Integer.MAX_VALUE : 1)) {
-                stream
+                List<Path> dirFiles = stream
                         .filter(Files::isRegularFile)
                         .filter(p -> fileNamePredicate.test(p.toString()))
-                        .forEach(this::processPath);
+                        .toList();
+                allFiles.addAll(dirFiles);
             }
         }
+        messageOutput.info("Processing %d files%n".formatted(allFiles.size()));
+        List<FileInfo> fileInfos = new ArrayList<>();
+
+        var lastPrintTime = System.currentTimeMillis();
+        for (int i = 0; i < allFiles.size(); i++) {
+            Path file = allFiles.get(i);
+            fileInfos.add(processPath(file));
+
+            var now = System.currentTimeMillis();
+            if (now - lastPrintTime > 1000L) {
+                lastPrintTime = now;
+                messageOutput.info("Processed %d/%d files%n".formatted(i + 1, allFiles.size()));
+            }
+        }
+        messageOutput.info("Processed %d files%n".formatted(allFiles.size()));
 
         RecentProjectsManager.getInstance().removePath(projectPath.toString());
 
-        messageOutput.info("Processed: %d%n".formatted(statistics.getProcessed()));
 
-        return statistics.allValid() ? CommandLine.ExitCode.OK : CommandLine.ExitCode.SOFTWARE;
+        var withErrors = fileInfos.stream().anyMatch(FileInfo::hasErrors);
+
+
+        List<ProcessResult> processResults = fileInfos.stream()
+                .flatMap(info -> info.getProcessLog().stream()
+                        .map(entry -> new ProcessResult(info.getFilename(), entry.level(), entry.message())))
+                .sorted(Comparator.comparing(ProcessResult::level).reversed().thenComparing(ProcessResult::filename))
+                .toList();
+
+        if (reporter != null) {
+            reporter.generate(report, processResults);
+        } else {
+            // print report to stdout only when no report file is given
+            processResults.stream()
+                    .filter(status -> status.level() != Level.INFO)
+                    .forEach(status -> messageOutput.info(
+                            "%s %s: %s%n".formatted(status.filename(), status.level(), status.status())
+                    ));
+        }
+
+        return withErrors ? CommandLine.ExitCode.SOFTWARE : CommandLine.ExitCode.OK;
     }
 
-    private void processPath(Path filePath) {
-        messageOutput.info("%s %s... ".formatted(fileProcessor.actionMessage(), filePath));
-        String result;
+    private FileInfo processPath(Path filePath) {
         Exception ex = null;
+        var fileInfo = new FileInfo(filePath.toString());
         try {
-            result = processPathInternal(filePath);
+            processPathInternal(filePath, fileInfo);
         } catch (Exception e) {
-            result = PROCESS_RESULT_FAILED_TO_PROCESS;
             ex = e;
+            fileInfo.addWarning(ProcessStatuses.FAILED_TO_PROCESS);
         }
-        messageOutput.info("%s%n".formatted(result));
         if (ex != null) {
             ex.printStackTrace();
         }
+        return fileInfo;
     }
 
-    private String processPathInternal(Path filePath) {
+    private void processPathInternal(Path filePath, FileInfo fileInfo) {
         PsiManager psiManager = PsiManager.getInstance(project);
 
         var virtualFile = VirtualFileManager.getInstance().refreshAndFindFileByNioPath(filePath);
         if (virtualFile == null) {
-            return PROCESS_RESULT_FAILED_OPEN;
+            fileInfo.addWarning(ProcessStatuses.FAILED_TO_OPEN);
+            return;
         }
 
         virtualFile.refresh(false, false);
 
         if (virtualFile.getFileType().isBinary()) {
-            return PROCESS_RESULT_BINARY_FILE;
+            fileInfo.addWarning(ProcessStatuses.SKIPPED_BINARY_FILE);
+            return;
         }
 
         var psiFile = psiManager.findFile(virtualFile);
         if (psiFile == null) {
-            return PROCESS_RESULT_FAILED_OPEN;
+            fileInfo.addWarning(ProcessStatuses.FAILED_TO_OPEN);
+            return;
         }
 
-        return processPsiFile(psiFile);
-    }
-
-
-    private String processPsiFile(PsiFile originalFile) {
-        return fileProcessor.processFile(originalFile);
+        fileProcessor.processFile(psiFile, fileInfo);
     }
 
     private void loadSettings(Path stylePath) throws SchemeImportException {

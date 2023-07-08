@@ -1,5 +1,6 @@
 package com.funbiscuit.idea.plugin.formatter;
 
+import com.funbiscuit.idea.plugin.formatter.report.FileInfo;
 import com.intellij.codeInsight.actions.AbstractLayoutCodeProcessor;
 import com.intellij.codeInsight.actions.RearrangeCodeProcessor;
 import com.intellij.codeInsight.actions.ReformatCodeProcessor;
@@ -16,16 +17,12 @@ import com.intellij.psi.PsiManager;
 import java.util.UUID;
 
 public class FileVerifier implements FileProcessor {
-    private static final String PROCESS_RESULT_DRY_OK = "Formatted well";
-    private static final String PROCESS_RESULT_DRY_FAIL = "Needs formatting";
 
     private final Project project;
     private final PsiDirectory projectPsiDir;
-    private final FormatStatistics statistics;
 
-    public FileVerifier(Project project, FormatStatistics statistics) {
+    public FileVerifier(Project project) {
         this.project = project;
-        this.statistics = statistics;
 
         VirtualFile baseDir = ProjectUtil.guessProjectDir(project);
         if (baseDir == null) {
@@ -38,7 +35,7 @@ public class FileVerifier implements FileProcessor {
     }
 
     @Override
-    public String processFile(PsiFile originalFile) {
+    public void processFile(PsiFile originalFile, FileInfo fileInfo) {
         String originalContent = originalFile.getText();
 
         PsiFile processedFile = createFileCopy(originalFile, originalContent);
@@ -48,17 +45,10 @@ public class FileVerifier implements FileProcessor {
         processor.run();
 
         if (processedFile.getText().equals(originalContent)) {
-            statistics.fileProcessed(true);
-            return PROCESS_RESULT_DRY_OK;
+            fileInfo.addInfo(ProcessStatuses.FORMATTED_WELL);
         } else {
-            statistics.fileProcessed(false);
-            return PROCESS_RESULT_DRY_FAIL;
+            fileInfo.addError(ProcessStatuses.NEEDS_FORMATTING);
         }
-    }
-
-    @Override
-    public String actionMessage() {
-        return "Checking";
     }
 
     private PsiFile createFileCopy(PsiFile originalFile, String content) {
