@@ -48,6 +48,10 @@ public class FormatCommand implements Callable<Integer> {
             description = "A comma-separated list of file masks")
     private List<String> masks = List.of();
 
+    @Option(names = {"-e", "--exclude"}, paramLabel = "<exclude>",
+            description = "File mask to exclude")
+    private List<String> excludes = List.of();
+
     @Option(names = {"-d", "--dry"}, description = "Perform a dry run: no file modifications, only exit status")
     private boolean dry;
 
@@ -77,7 +81,18 @@ public class FormatCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        Predicate<String> fileNamePredicate = masks.stream()
+        Predicate<String> fileNameExclude = excludes.stream()
+                .map(m -> m
+                        .replace(".", "\\.")
+                        .replace("*", ".*")
+                        .replace("?", ".")
+                        .replace("+", "\\+"))
+                .map(Pattern::compile)
+                .map(Pattern::asMatchPredicate)
+                .reduce(Predicate::or)
+                .orElse(p -> false);
+
+        Predicate<String> fileNameInclude = masks.stream()
                 .map(m -> m
                         .replace(".", "\\.")
                         .replace("*", ".*")
@@ -110,7 +125,8 @@ public class FormatCommand implements Callable<Integer> {
             try (var stream = Files.walk(path, recursive ? Integer.MAX_VALUE : 1)) {
                 List<Path> dirFiles = stream
                         .filter(Files::isRegularFile)
-                        .filter(p -> fileNamePredicate.test(p.toString()))
+                        .filter(p -> !fileNameExclude.test(p.toString()))
+                        .filter(p -> fileNameInclude.test(p.toString()))
                         .toList();
                 allFiles.addAll(dirFiles);
             }
