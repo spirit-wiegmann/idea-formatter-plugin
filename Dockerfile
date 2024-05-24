@@ -18,6 +18,7 @@ RUN wget --progress=bar:force https://download.jetbrains.com/idea/ideaIC-2023.1.
         plugins-old/keymap-*  \
         plugins-old/properties \
         plugins-old/Groovy \
+        plugins-old/yaml \
         plugins \
     && rm -r plugins-old
 
