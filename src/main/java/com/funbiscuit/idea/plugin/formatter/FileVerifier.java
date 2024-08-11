@@ -41,7 +41,7 @@ public class FileVerifier implements FileProcessor {
         PsiFile processedFile = createFileCopy(originalFile, originalContent);
 
         AbstractLayoutCodeProcessor processor = new ReformatCodeProcessor(processedFile, false);
-        processor = new RearrangeCodeProcessor(processor);
+        // processor = new RearrangeCodeProcessor(processor);
         processor.run();
 
         if (processedFile.getText().equals(originalContent)) {
